@@ -573,6 +573,7 @@ fn start_pomo(app: &AppHandle, focus_min: u64, rest_min: u64) {
     }
     set_skin_temp(app, "estudiando");
     js(app, "window.__lm&&window.__lm.play()");
+    chime(true);
 }
 
 fn stop_pomo(app: &AppHandle) {
@@ -590,6 +591,18 @@ fn stop_pomo(app: &AppHandle) {
     }
     refresh_tooltip(app);
 }
+
+// Campanita al empezar una etapa: sube al empezar el estudio y baja al empezar el descanso.
+#[cfg(windows)]
+fn chime(focus: bool) {
+    use windows::Win32::Media::Audio::{PlaySoundW, SND_ASYNC, SND_MEMORY, SND_NODEFAULT};
+    static ESTUDIO: &[u8] = include_bytes!("../sounds/estudio.wav");
+    static DESCANSO: &[u8] = include_bytes!("../sounds/descanso.wav");
+    let wav = if focus { ESTUDIO } else { DESCANSO };
+    unsafe { let _ = PlaySoundW(windows_core::PCWSTR(wav.as_ptr() as *const u16), None, SND_MEMORY | SND_ASYNC | SND_NODEFAULT); }
+}
+#[cfg(not(windows))]
+fn chime(_focus: bool) {}
 
 // Pausa o reanuda el tiempo de la etapa (la música sigue como está).
 fn pause_pomo(app: &AppHandle) {
@@ -641,10 +654,12 @@ fn pomo_tick(app: &AppHandle) {
     };
     match changed {
         Some(Phase::Rest) => {
+            chime(false);
             set_skin_temp(app, "descansando");
             js(app, "window.__lm&&window.__lm.pause()");
         }
         Some(Phase::Focus) => {
+            chime(true);
             set_skin_temp(app, "estudiando");
             js(app, "window.__lm&&window.__lm.play()");
         }
