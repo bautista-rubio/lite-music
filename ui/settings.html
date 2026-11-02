@@ -165,7 +165,7 @@ const TABS = [
     ['Pomodoro', [
       { type: 'num', key: 'pomo_focus_min', label: 'Estudio', unit: 'min', min: 1, max: 180 },
       { type: 'num', key: 'pomo_rest_min', label: 'Descanso', unit: 'min', min: 1, max: 60 },
-      { type: 'button', label: 'Pomodoro', desc: 'Pausa y reanuda la música en cada fase.', buttons: [['Iniciar', 'pomo_start', 'pri'], ['Detener', 'pomo_stop']] },
+      { type: 'button', label: 'Pomodoro', desc: 'Pausa y reanuda la música en cada fase.', buttons: [['Iniciar', 'pomo_start', 'pri'], ['Pausar / reanudar', 'pomo_pause'], ['Siguiente etapa', 'pomo_next'], ['Detener', 'pomo_stop']] },
     ]],
     ['Dormir', [
       { type: 'button', label: 'Pausar la música en', buttons: [['15 min', 'sleep15'], ['30 min', 'sleep30'], ['1 hora', 'sleep60'], ['Cancelar', 'sleep0']] },

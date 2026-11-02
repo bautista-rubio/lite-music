@@ -99,6 +99,8 @@ struct PlayerState {
     pomo_phase: String,
     pomo_left: u64,
     #[serde(default)]
+    pomo_paused: bool,
+    #[serde(default)]
     liked: bool,
     sleep_left: u64,
     cfg: Settings,
@@ -117,6 +119,13 @@ struct Pomo {
     focus_s: u64,
     rest_s: u64,
     prev_skin: String,
+    paused: Option<u64>, // segundos que quedaban al pausar
+}
+
+impl Pomo {
+    fn left(&self) -> u64 {
+        self.paused.unwrap_or_else(|| self.end.saturating_duration_since(Instant::now()).as_secs())
+    }
 }
 
 struct AppState {
@@ -557,6 +566,7 @@ fn start_pomo(app: &AppHandle, focus_min: u64, rest_min: u64) {
             p.prev_skin = st.player.lock().unwrap().skin.clone();
         }
         p.phase = Phase::Focus;
+        p.paused = None;
         p.focus_s = focus_min * 60;
         p.rest_s = rest_min * 60;
         p.end = Instant::now() + Duration::from_secs(p.focus_s);
@@ -581,11 +591,38 @@ fn stop_pomo(app: &AppHandle) {
     refresh_tooltip(app);
 }
 
+// Pausa o reanuda el tiempo de la etapa (la música sigue como está).
+fn pause_pomo(app: &AppHandle) {
+    {
+        let st = app.state::<AppState>();
+        let mut p = st.pomo.lock().unwrap();
+        if p.phase == Phase::Off {
+            return;
+        }
+        match p.paused.take() {
+            Some(left) => p.end = Instant::now() + Duration::from_secs(left),
+            None => p.paused = Some(p.left()),
+        }
+    }
+    refresh_tooltip(app);
+}
+
+// Termina la etapa ahora: de estudio a descanso o al revés, y arranca el tiempo de la nueva.
+fn next_pomo(app: &AppHandle) {
+    {
+        let st = app.state::<AppState>();
+        let mut p = st.pomo.lock().unwrap();
+        p.paused = None;
+        p.end = Instant::now();
+    }
+    pomo_tick(app);
+}
+
 fn pomo_tick(app: &AppHandle) {
     let changed = {
         let st = app.state::<AppState>();
         let mut p = st.pomo.lock().unwrap();
-        if p.phase == Phase::Off {
+        if p.phase == Phase::Off || p.paused.is_some() {
             return;
         }
         let now = Instant::now();
@@ -789,8 +826,9 @@ fn refresh_tooltip(app: &AppHandle) {
     {
         let pm = st.pomo.lock().unwrap();
         if pm.phase != Phase::Off {
-            let left = pm.end.saturating_duration_since(Instant::now()).as_secs();
-            t += &format!("\n{} {}:{:02}", if pm.phase == Phase::Focus { "Estudio" } else { "Descanso" }, left / 60, left % 60);
+            let left = pm.left();
+            t += &format!("\n{} {}:{:02}{}", if pm.phase == Phase::Focus { "Estudio" } else { "Descanso" }, left / 60, left % 60,
+                if pm.paused.is_some() { " (en pausa)" } else { "" });
         }
     }
     if let Some(at) = *st.sleep_at.lock().unwrap() {
@@ -829,7 +867,8 @@ fn get_state(state: tauri::State<AppState>) -> PlayerState {
     p.cfg = state.settings.lock().unwrap().clone();
     p.glass = glass_spec(&p.cfg);
     p.thin = ISL_THIN.load(SeqCst);
-    p.pomo_left = if pm.phase == Phase::Off { 0 } else { pm.end.saturating_duration_since(Instant::now()).as_secs() };
+    p.pomo_left = if pm.phase == Phase::Off { 0 } else { pm.left() };
+    p.pomo_paused = pm.paused.is_some();
     p.sleep_left = state.sleep_at.lock().unwrap().map_or(0, |t| t.saturating_duration_since(Instant::now()).as_secs());
     p
 }
@@ -837,6 +876,8 @@ fn get_state(state: tauri::State<AppState>) -> PlayerState {
 #[tauri::command]
 fn control(app: AppHandle, action: String, value: Option<f64>) {
     if action == "search" { return open_search(&app); }
+    if action == "pomo_pause" { return pause_pomo(&app); }
+    if action == "pomo_next" { return next_pomo(&app); }
     if action == "island" {   // la isla se despliega (1) o se repliega (0): la ventana crece o se achica desde el centro de arriba
         let st = app.state::<AppState>();
         let (format, scale) = { let c = st.settings.lock().unwrap(); (c.format.clone(), c.scale) };
@@ -949,6 +990,7 @@ struct BarState {
     sleep_left: u64,
     pomo_phase: &'static str,
     pomo_left: u64,
+    pomo_paused: bool,
     update: Option<String>,
     theme: String,
     glass: serde_json::Value, // ver glass_spec
@@ -959,11 +1001,11 @@ struct BarState {
 fn bar_state(app: AppHandle) -> BarState {
     let st = app.state::<AppState>();
     let (source, theme, glass) = { let c = st.settings.lock().unwrap(); (c.source.clone(), c.theme.clone(), glass_spec(&c)) };
-    let (pomo_phase, pomo_left) = {
+    let (pomo_phase, pomo_left, pomo_paused) = {
         let pm = st.pomo.lock().unwrap();
         match pm.phase {
-            Phase::Off => ("off", 0),
-            ph => (if ph == Phase::Focus { "focus" } else { "rest" }, pm.end.saturating_duration_since(Instant::now()).as_secs()),
+            Phase::Off => ("off", 0, false),
+            ph => (if ph == Phase::Focus { "focus" } else { "rest" }, pm.left(), pm.paused.is_some()),
         }
     };
     let sleep_left = st.sleep_at.lock().unwrap().map_or(0, |t| t.saturating_duration_since(Instant::now()).as_secs());
@@ -974,6 +1016,7 @@ fn bar_state(app: AppHandle) -> BarState {
         sleep_left,
         pomo_phase,
         pomo_left,
+        pomo_paused,
         update: UPD.get().and_then(|u| u.lock().unwrap().version.clone()),
         theme,
         glass,
@@ -985,7 +1028,7 @@ fn bar_state(app: AppHandle) -> BarState {
 // Asíncrono: un comando síncrono corre en el hilo principal y abrir Configuración desde ahí lo deja bloqueado.
 #[tauri::command]
 async fn bar_action(app: AppHandle, action: String) {
-    const OK: [&str; 14] = ["src_ytm", "src_spotify", "float", "cfg", "upd", "pomo25", "pomo50", "pomo0", "sleep15", "sleep30", "sleep60", "sleep90", "sleep0", "show"];
+    const OK: [&str; 16] = ["src_ytm", "src_spotify", "float", "cfg", "upd", "pomo25", "pomo50", "pomo0", "pomo_pause", "pomo_next", "sleep15", "sleep30", "sleep60", "sleep90", "sleep0", "show"];
     if OK.contains(&action.as_str()) {
         on_menu(&app, &action);
     }
@@ -1091,6 +1134,8 @@ fn settings_action(app: AppHandle, action: String) {
             start_pomo(&app, f, r);
         }
         "pomo_stop" => stop_pomo(&app),
+        "pomo_pause" => pause_pomo(&app),
+        "pomo_next" => next_pomo(&app),
         a if a.starts_with("sleep") => { if let Ok(m) = a[5..].parse() { set_sleep(&app, m) } }
         "check_update" => { let a = app.clone(); tauri::async_runtime::spawn(check_update(a, true)); }
         "install_update" => { tauri::async_runtime::spawn(install_update(app.clone())); }
@@ -1486,6 +1531,8 @@ fn on_menu(app: &AppHandle, id: &str) {
         "pomo25" => start_pomo(app, 25, 5),
         "pomo50" => start_pomo(app, 50, 10),
         "pomo0" => stop_pomo(app),
+        "pomo_pause" => pause_pomo(app),
+        "pomo_next" => next_pomo(app),
         id if id.starts_with("sleep") => { if let Ok(m) = id[5..].parse() { set_sleep(app, m) } } // "sleep30" = en 30 min, "sleep0" = cancelar
         "cfg" => open_settings(app),
         "upd" => {
@@ -1524,7 +1571,7 @@ mod thumbbar;
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![report_state, get_state, control, scale_float, get_settings, set_setting, settings_action, choose_source, open_link, bar_state, bar_action, search, search_results, search_play, search_hide])
-        .manage(AppState { pomo: Mutex::new(Pomo { phase: Phase::Off, end: Instant::now(), focus_s: 1500, rest_s: 300, prev_skin: String::new() }), user_float: Mutex::new(true), auto_hidden: Mutex::new(false), settings: Mutex::new(Settings::default()), pending_pos: Mutex::new(None), player: Mutex::new(PlayerState::default()), float_visible: Mutex::new(true), last_report: Mutex::new(Instant::now()), pos_at: Mutex::new(Instant::now()), sleep_at: Mutex::new(None), search: Mutex::new((0, None)) })
+        .manage(AppState { pomo: Mutex::new(Pomo { phase: Phase::Off, end: Instant::now(), focus_s: 1500, rest_s: 300, prev_skin: String::new(), paused: None }), user_float: Mutex::new(true), auto_hidden: Mutex::new(false), settings: Mutex::new(Settings::default()), pending_pos: Mutex::new(None), player: Mutex::new(PlayerState::default()), float_visible: Mutex::new(true), last_report: Mutex::new(Instant::now()), pos_at: Mutex::new(Instant::now()), sleep_at: Mutex::new(None), search: Mutex::new((0, None)) })
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--minimized"])))
         .plugin(tauri_plugin_single_instance::init(|app, _, _| show(app)))
@@ -1668,7 +1715,9 @@ fn main() {
             let p1 = MenuItem::with_id(app, "pomo25", "Iniciar 25 min estudio / 5 descanso", true, None::<&str>)?;
             let p2 = MenuItem::with_id(app, "pomo50", "Iniciar 50 min estudio / 10 descanso", true, None::<&str>)?;
             let p3 = MenuItem::with_id(app, "pomo0", "Detener", true, None::<&str>)?;
-            let m_pomo = Submenu::with_items(app, "Pomodoro", true, &[&p1, &p2, &p3])?;
+            let p4 = MenuItem::with_id(app, "pomo_pause", "Pausar / reanudar el tiempo", true, None::<&str>)?;
+            let p5 = MenuItem::with_id(app, "pomo_next", "Pasar a la siguiente etapa", true, None::<&str>)?;
+            let m_pomo = Submenu::with_items(app, "Pomodoro", true, &[&p1, &p2, &PredefinedMenuItem::separator(app)?, &p4, &p5, &p3])?;
             let sl = |id: &str, t: &str| MenuItem::with_id(app, id, t, true, None::<&str>);
             let m_sleep = Submenu::with_items(app, "Temporizador para dormir", true, &[&sl("sleep15", "En 15 min")?, &sl("sleep30", "En 30 min")?,
                 &sl("sleep60", "En 1 hora")?, &sl("sleep90", "En 1 h 30 min")?, &PredefinedMenuItem::separator(app)?, &sl("sleep0", "Cancelar")?])?;

@@ -31,6 +31,7 @@
   .chips span { color: var(--dim); margin-right: 2px; white-space: nowrap; }
   .chips button { padding: 4px 10px; border-radius: 99px; border: 0; background: var(--seg); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
   .chips button:hover { background: var(--accent); color: #fff; }
+  #pomoChips.running .idle, #pomoChips:not(.running) .run { display: none; }
   .ic { position: relative; width: 32px; height: 30px; border: 0; border-radius: 7px; background: transparent; color: var(--dim); display: grid; place-items: center; cursor: pointer; }
   .ic:hover, .ic.on { background: var(--hover); color: var(--text); }
   .ic svg { width: 17px; height: 17px; fill: currentColor; }
@@ -75,7 +76,8 @@
   <div class="chips" id="sleepChips"><span>Pausar la música en</span>
     <button data-a="sleep15">15 min</button><button data-a="sleep30">30 min</button><button data-a="sleep60">1 hora</button><button data-a="sleep90">1 h 30</button><button data-a="sleep0">Cancelar</button></div>
   <div class="chips" id="pomoChips"><span>Pomodoro</span>
-    <button data-a="pomo25">25 / 5 min</button><button data-a="pomo50">50 / 10 min</button><button data-a="pomo0">Detener</button></div>
+    <button data-a="pomo25" class="idle">25 / 5 min</button><button data-a="pomo50" class="idle">50 / 10 min</button>
+    <button data-a="pomo_pause" class="run" id="pomoPause">Pausar</button><button data-a="pomo_next" class="run" id="pomoNext">Pasar a descanso</button><button data-a="pomo0" class="run">Detener</button></div>
   <button class="pill upd" id="upd" hidden title="Descarga e instala la versión nueva (la app se reinicia)"></button>
   <button class="ic" id="float" title="Mostrar / ocultar el reproductor flotante"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zm2 2v10h14V7zm6 4h6v4.5h-6z"/></svg></button>
   <button class="ic" id="sleep" title="Temporizador para dormir"><svg viewBox="0 0 24 24"><path d="M14.5 3a8.5 8.5 0 1 0 6.5 14A7 7 0 0 1 14.5 3z"/></svg></button>
@@ -123,7 +125,10 @@ async function refresh() {
   document.querySelectorAll('#seg button').forEach((b) => b.classList.toggle('on', b.dataset.src === s.source));
   $('float').classList.toggle('on', s.float);
   const st = $('status');
-  if (s.pomo_phase !== 'off') { st.textContent = `${s.pomo_phase === 'focus' ? 'Estudio' : 'Descanso'} ${fmt(s.pomo_left)}`; st.className = 'pill ' + (s.pomo_phase === 'focus' ? 'focus' : 'rest'); }
+  $('pomoChips').classList.toggle('running', s.pomo_phase !== 'off');
+  $('pomoPause').textContent = s.pomo_paused ? 'Reanudar' : 'Pausar';
+  $('pomoNext').textContent = s.pomo_phase === 'focus' ? 'Pasar a descanso' : 'Pasar a estudio';
+  if (s.pomo_phase !== 'off') { st.textContent = `${s.pomo_phase === 'focus' ? 'Estudio' : 'Descanso'} ${fmt(s.pomo_left)}${s.pomo_paused ? ' · en pausa' : ''}`; st.className = 'pill ' + (s.pomo_phase === 'focus' ? 'focus' : 'rest'); }
   else if (s.sleep_left > 0) { st.textContent = `Se pausa en ${fmt(s.sleep_left)}`; st.className = 'pill sleep'; }
   else st.textContent = '';
   st.hidden = !!open || !st.textContent;

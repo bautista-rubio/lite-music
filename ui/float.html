@@ -60,6 +60,9 @@
   #badge { position: absolute; top: -9px; right: 26px; padding: 2px 9px; border-radius: 99px; font-size: 10.5px; font-weight: 650;
            letter-spacing: .2px; color: #fff; background: var(--accent); box-shadow: 0 2px 8px #0004; display: none; font-variant-numeric: tabular-nums; }
   #badge.rest { background: #2f9e5c; } #badge.sleep { background: #5b6ee1; }
+  #badge { align-items: center; gap: 2px; } #badge.sleep .pb { display: none; }
+  .pb { width: 15px; height: 15px; padding: 0; margin-right: -4px; border: 0; border-radius: 50%; background: transparent; color: #fff; display: grid; place-items: center; cursor: pointer; }
+  .pb:first-of-type { margin-left: 3px; } .pb:hover { background: #fff3; } .pb svg { width: 11px; height: 11px; fill: currentColor; }
   /* ===== Estilo Cristal: vidrio translúcido con brillo en los bordes y botones tipo burbuja ===== */
   html.glass { --glass: rgba(30, 30, 40, .28); --rim: rgba(255, 255, 255, .38); --rim2: rgba(255, 255, 255, .1); --text: #fff; --dim: rgba(255, 255, 255, .74);
                --track: rgba(255, 255, 255, .22); --hover: rgba(255, 255, 255, .14); --tint: rgba(255, 255, 255, .1); }
@@ -84,6 +87,7 @@
   html.glass #bar, html.glass #vbar { box-shadow: inset 0 1px 1px rgba(0, 0, 0, .12); }
   html.glass #vfill { background: var(--text); opacity: .9; }
   html.glass #badge { background: rgba(255, 61, 110, .85); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), 0 2px 8px #0003; }
+  html.glass #badge.rest { background: rgba(47, 158, 92, .85); } html.glass #badge.sleep { background: rgba(91, 110, 225, .85); }
   /* fondo: la carátula de la canción, muy desenfocada */
   #art { display: none; position: absolute; inset: 0; border-radius: inherit; overflow: hidden; z-index: -1;
          background: linear-gradient(135deg, #ff7a9c, #7a4dff); }
@@ -144,7 +148,8 @@
     box-shadow: 0 6px 16px rgba(0, 0, 0, .28); overflow: visible;
     transition: width .32s cubic-bezier(.3, 1.25, .5, 1), height .32s cubic-bezier(.3, 1.25, .5, 1), border-radius .32s, padding .32s; }
   html.glass body.fmt-island .card::before, html.glass body.fmt-island .card::after { display: none; }
-  body.fmt-island #vcol, body.fmt-island #badge { display: none !important; }
+  body.fmt-island #vcol, body.fmt-island:not(.isl-ready) #badge, body.fmt-island.isl-closing #badge, body.fmt-island #badge.sleep { display: none !important; }
+  body.fmt-island #badge { top: auto; bottom: 20px; right: 50px; } body.fmt-island #bdl { display: none; }
   /* aletas cóncavas que unen la isla con el borde de la pantalla, del mismo color que la isla */
   .fin { display: none; }
   body.fmt-island .fin { display: block; position: absolute; top: 0; width: var(--f); height: var(--f); transition: width .32s, height .32s; }
@@ -220,7 +225,9 @@
     <div id="vbar"><div id="vfill"></div></div>
     <svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4zM16 8.5a5 5 0 0 1 0 7l-1.2-1.2a3.3 3.3 0 0 0 0-4.6z"/></svg>
   </div>
-  <div id="badge"></div>
+  <div id="badge"><span id="bdl"></span><span id="bdt"></span>
+    <button class="pb" id="bdp" title="Pausar el tiempo"><svg viewBox="0 0 24 24" id="bdpi"></svg></button>
+    <button class="pb" id="bdn" title="Pasar a descanso"><svg viewBox="0 0 24 24"><path d="M15.8 5H18v14h-2.2zM4 5l10.5 7L4 19z"/></svg></button></div>
   <i class="fin l"></i><i class="fin r"></i>
   <div id="eq"><i></i><i></i><i></i><i></i><i></i><i></i></div>
 </div>
@@ -434,8 +441,14 @@ function render(st) {
   setText($('artist'), st.artist || '');
   setProgress(st);
   const bd = $('badge');
-  if (st.pomo_phase && st.pomo_phase !== 'off') { setText(bd, `${st.pomo_phase === 'focus' ? 'Estudio' : 'Descanso'} ${fmt(st.pomo_left)}`); bd.className = st.pomo_phase === 'focus' ? '' : 'rest'; bd.style.display = 'block'; }
-  else if (st.sleep_left > 0) { setText(bd, `Se pausa en ${fmt(st.sleep_left)}`); bd.className = 'sleep'; bd.style.display = 'block'; }
+  if (st.pomo_phase && st.pomo_phase !== 'off') {
+    const focus = st.pomo_phase === 'focus';
+    setText($('bdl'), focus ? 'Estudio ' : 'Descanso '); setText($('bdt'), fmt(st.pomo_left));
+    bd.className = focus ? '' : 'rest'; bd.style.display = 'flex'; bd.style.opacity = st.pomo_paused ? .75 : 1;
+    if (bd.dataset.paused !== String(!!st.pomo_paused)) { bd.dataset.paused = !!st.pomo_paused; $('bdpi').innerHTML = st.pomo_paused ? ICON.play : ICON.pause; $('bdp').title = st.pomo_paused ? 'Reanudar el tiempo' : 'Pausar el tiempo'; }
+    $('bdn').title = focus ? 'Pasar a descanso' : 'Pasar a estudio';
+  }
+  else if (st.sleep_left > 0) { setText($('bdl'), 'Se pausa en '); setText($('bdt'), fmt(st.sleep_left)); bd.className = 'sleep'; bd.style.display = 'flex'; bd.style.opacity = 1; }
   else bd.style.display = 'none';
   curVol = st.vol ?? 1;
   if (!draggingVol) $('vfill').style.height = Math.round(curVol * 100) + '%';
@@ -593,7 +606,7 @@ function moodStop() { if (moodTimer) clearInterval(moodTimer); moodTimer = 0; }
 const stage = $('stage');
 let down = null;
 document.body.addEventListener('mousedown', (e) => {
-  if (e.button !== 0 || e.target.closest('.b') || e.target.closest('#bar') || e.target.closest('#vcol')) return;
+  if (e.button !== 0 || e.target.closest('.b') || e.target.closest('.pb') || e.target.closest('#bar') || e.target.closest('#vcol')) return;
   down = { x: e.screenX, y: e.screenY, onStage: !!e.target.closest('#stage'), moved: false };
 });
 document.body.addEventListener('mousemove', (e) => {
@@ -633,6 +646,8 @@ $('prev').onclick = () => { trigger('prev'); inv('control', { action: 'prev' });
 $('next').onclick = () => { trigger('next'); inv('control', { action: 'next' }); };
 $('like').onclick = () => inv('control', { action: 'like' });
 $('find').onclick = () => inv('control', { action: 'search' });
+$('bdp').onclick = () => inv('control', { action: 'pomo_pause' });
+$('bdn').onclick = () => inv('control', { action: 'pomo_next' });
 const refit = () => { const t = shownTitle; shownTitle = null; setTitle(t); };   // el título vuelve a medir si entra (con o sin desplazarse)
 // Isla con Cristal: las aletas toman el color medio de la carátula (una vez por canción; si el servidor no lo permite,
 // quedan con el vidrio oscuro de siempre)
