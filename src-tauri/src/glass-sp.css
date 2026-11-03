@@ -153,8 +153,15 @@ div:has(> img[data-testid="entity-image"]), div:has(> img[data-testid="cover-art
 #main-view [data-testid="entity-header"]:not(:has([data-testid="user-image"])) img[sizes] { border-radius: 12px; }
 #main-view [data-testid="tracklist-row"] img { border-radius: 8px; }
 
-/* Artista: el fondo sólido detrás de populares/discografía se vuelve casi transparente */
-[data-testid="overscroll-background"] { opacity: .35 !important; }
+/* Artista: la foto de cabecera queda fija detrás de la lista; sin el fondo sólido de Spotify se veía a través de las canciones.
+   Se desvanece mientras bajás (ligado al desplazamiento, sin código), con el degradé oscuro que lleva encima. */
+#main-view .main-view-container { timeline-scope: --lm-hero; }
+#main-view .main-view-container__scroll-node > [data-overlayscrollbars-viewport] { scroll-timeline: --lm-hero block; }
+#main-view :is([data-testid="background-image"], [data-testid="background-image"] ~ div) { animation: lm-hero-out linear both; animation-timeline: --lm-hero; animation-range: 0 300px; }
+@keyframes lm-hero-out { to { opacity: 0; } }
+/* el velo de atrás y el degradé de arriba de la lista vienen en el color del artista (gris en muchos): fuera, el fondo es el del Cristal */
+#main-view [data-testid="overscroll-background"] { opacity: 0 !important; }
+#main-view section[data-testid="artist-page"] [data-testid="entity-header"] + div > div[style*="--background-base"] { background-image: none !important; }
 
 /* 40-capas: cola, letra, vista ampliada, menus, dialogos, avisos (los tooltips quedan como el original) */
 
