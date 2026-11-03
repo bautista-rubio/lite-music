@@ -154,10 +154,10 @@ div:has(> img[data-testid="entity-image"]), div:has(> img[data-testid="cover-art
 #main-view [data-testid="tracklist-row"] img { border-radius: 8px; }
 
 /* Artista: la foto de cabecera queda fija detrás de la lista; sin el fondo sólido de Spotify se veía a través de las canciones.
-   Se desvanece mientras bajás (ligado al desplazamiento, sin código), igual que el velo de color que tiene detrás. */
+   Se desvanece mientras bajás (ligado al desplazamiento, sin código), con el degradé oscuro que lleva encima y el velo de color de atrás. */
 #main-view .main-view-container { timeline-scope: --lm-hero; }
 #main-view .main-view-container__scroll-node > [data-overlayscrollbars-viewport] { scroll-timeline: --lm-hero block; }
-#main-view [data-testid="background-image"] { animation: lm-hero-out linear both; animation-timeline: --lm-hero; animation-range: 0 300px; }
+#main-view :is([data-testid="background-image"], [data-testid="background-image"] ~ div) { animation: lm-hero-out linear both; animation-timeline: --lm-hero; animation-range: 0 300px; }
 #main-view [data-testid="overscroll-background"] { animation: lm-veil-out linear both; animation-timeline: --lm-hero; animation-range: 0 300px; }
 @keyframes lm-hero-out { to { opacity: 0; } }
 @keyframes lm-veil-out { from { opacity: .35; } to { opacity: 0; } }
