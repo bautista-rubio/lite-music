@@ -50,7 +50,37 @@
     r.classList.toggle('lm-light', g.tone === 'light');
     r.style.setProperty('--lm-tint', g.tint);
   });
-  setGlass(/*__LM_GLASS_ON__*/null);
+  const G0 = /*__LM_GLASS_ON__*/null;
+  setGlass(G0);
+
+  // Pantalla de carga: mientras la página arma su interfaz se ve el ecualizador de la isla sobre el fondo del tema
+  // (en vez de blanco o vacío). Va fuera de <body> y se borra sola cuando aparece la interfaz del servicio.
+  whenRoot(() => {
+    const light = G0?.tone === 'light', tint = G0?.tint || (SP ? '#121212' : '#030303');
+    const ov = document.createElement('div');
+    ov.id = 'lm-loading';
+    ov.innerHTML = `<style>
+      #lm-loading { position: fixed; inset: 0; z-index: 2147483647; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+        background: ${G0 ? `radial-gradient(70% 60% at 12% 8%, color-mix(in srgb, ${tint} 70%, #fff), transparent 70%), linear-gradient(160deg, color-mix(in srgb, ${tint} 88%, #fff), color-mix(in srgb, ${tint} 80%, #000))` : tint};
+        font: 13px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: ${light ? 'rgba(20, 22, 31, .72)' : 'rgba(255, 255, 255, .72)'};
+        transition: opacity .35s; pointer-events: none; }
+      #lm-loading.out { opacity: 0; }
+      #lm-loading .pill { display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-radius: 99px; font-weight: 600; font-size: 14px;
+        color: ${light ? '#14161f' : '#fff'}; background: ${light ? 'rgba(255, 255, 255, .55)' : 'rgba(18, 18, 26, .55)'};
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, ${light ? '.95' : '.3'}), inset 0 -1px 0 rgba(${light ? '20, 24, 40, .07' : '255, 255, 255, .07'}), 0 8px 24px rgba(0, 0, 0, ${light ? '.12' : '.3'}); }
+      #lm-loading .eq { display: flex; align-items: center; gap: 3px; height: 22px; }
+      #lm-loading .eq i { width: 3px; border-radius: 2px; background: #ff3d6e; animation: lm-eq .65s steps(5) infinite alternate; }
+      @keyframes lm-eq { from { transform: scaleY(.3); } to { transform: scaleY(1); } }
+    </style><div class="pill"><div class="eq">${[40, 80, 55, 95, 60, 35].map((h, i) => `<i style="height:${h}%;animation-delay:-${(i * 3 % 6) / 10 + .1}s"></i>`).join('')}</div>Lite Music</div>
+    <div>${SP ? 'Conectando con Spotify' : 'Abriendo YouTube Music'}</div>`;
+    document.documentElement.appendChild(ov);
+    // lista: la barra de navegación del servicio ya está en la página. A los 20 s se va igual (sin conexión, página de error)
+    const t0 = Date.now(), ready = () => document.querySelector(SP ? '#main-view, [data-testid="root"] nav' : 'ytmusic-nav-bar');
+    const tick = setInterval(() => {
+      if (!ready() && Date.now() - t0 < 20000) return;
+      clearInterval(tick); ov.classList.add('out'); setTimeout(() => ov.remove(), 400);
+    }, 200);
+  });
   // YouTube Music con Cristal: la línea de tiempo se dibuja sobre el borde curvo de la cápsula (CSS) con el avance en --lm-p
   let progObs = null;
   const glassProgress = () => {

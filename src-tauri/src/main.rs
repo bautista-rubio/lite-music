@@ -1050,6 +1050,14 @@ async fn bar_action(app: AppHandle, action: String) {
 }
 
 // Cristal de la app (YouTube Music, Spotify y ventanas propias): null si está apagado, o { tone, tint }.
+// Fondo de la página antes de que dibuje nada: el del Cristal o el del servicio, en vez del blanco de WebView2.
+fn page_bg(c: &Settings) -> tauri::window::Color {
+    let tint = glass_spec(c)["tint"].as_str().map(str::to_string);
+    let hex = tint.unwrap_or_else(|| (if c.source == "spotify" { "#121212" } else { "#030303" }).into());
+    let v = u32::from_str_radix(hex.trim_start_matches('#'), 16).unwrap_or(0);
+    tauri::window::Color((v >> 16) as u8, (v >> 8) as u8, v as u8, 255)
+}
+
 // El tono (texto claro u oscuro) sale del brillo del color de fondo.
 fn glass_spec(c: &Settings) -> serde_json::Value {
     if c.glass == "off" { return serde_json::Value::Null; }
@@ -1599,7 +1607,7 @@ fn main() {
         .setup(|app| {
             *app.state::<AppState>().settings.lock().unwrap() = load_settings(app.handle());
             let st = app.state::<AppState>();
-            let (start_url, glass, audio_only) = { let c = st.settings.lock().unwrap(); (source_url(&c.source), glass_spec(&c), c.audio_only) };
+            let (start_url, glass, audio_only, bg) = { let c = st.settings.lock().unwrap(); (source_url(&c.source), glass_spec(&c), c.audio_only, page_bg(&c)) };
             // estilo Cristal: las hojas de cada sitio viajan dentro del script; si arranca prendido se aplica antes de pintar
             let init = include_str!("inject.js")
                 .replace("/*__LM_GLASS_CSS__*/{}", &serde_json::json!({ "ytm": concat!(include_str!("glass-ytm.css"), include_str!("glass-ytm-pages.css")), "sp": concat!(include_str!("glass-sp.css"), include_str!("glass-sp-pages.css")) }).to_string())
@@ -1608,6 +1616,7 @@ fn main() {
             #[allow(unused_mut)]
             let mut builder = WebviewBuilder::new("main", WebviewUrl::External(start_url.parse().unwrap()))
             .user_agent(&user_agent())
+            .background_color(bg)
             .initialization_script(&init)
             .on_navigation(|u| {
                 let ok = allowed_in_app(u);
