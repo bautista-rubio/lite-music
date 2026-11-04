@@ -59,7 +59,9 @@
     const light = G0?.tone === 'light', tint = G0?.tint || (SP ? '#121212' : '#030303');
     const ov = document.createElement('div');
     ov.id = 'lm-loading';
-    ov.innerHTML = `<style>
+    // sin innerHTML: YouTube Music exige Trusted Types y rechaza HTML armado como texto
+    const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
+    ov.append(el('style', '', `
       #lm-loading { position: fixed; inset: 0; z-index: 2147483647; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
         background: ${G0 ? `radial-gradient(70% 60% at 12% 8%, color-mix(in srgb, ${tint} 70%, #fff), transparent 70%), linear-gradient(160deg, color-mix(in srgb, ${tint} 88%, #fff), color-mix(in srgb, ${tint} 80%, #000))` : tint};
         font: 13px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: ${light ? 'rgba(20, 22, 31, .72)' : 'rgba(255, 255, 255, .72)'};
@@ -70,12 +72,16 @@
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, ${light ? '.95' : '.3'}), inset 0 -1px 0 rgba(${light ? '20, 24, 40, .07' : '255, 255, 255, .07'}), 0 8px 24px rgba(0, 0, 0, ${light ? '.12' : '.3'}); }
       #lm-loading .eq { display: flex; align-items: center; gap: 3px; height: 22px; }
       #lm-loading .eq i { width: 3px; border-radius: 2px; background: #ff3d6e; animation: lm-eq .65s steps(5) infinite alternate; }
-      @keyframes lm-eq { from { transform: scaleY(.3); } to { transform: scaleY(1); } }
-    </style><div class="pill"><div class="eq">${[40, 80, 55, 95, 60, 35].map((h, i) => `<i style="height:${h}%;animation-delay:-${(i * 3 % 6) / 10 + .1}s"></i>`).join('')}</div>Lite Music</div>
-    <div>${SP ? 'Conectando con Spotify' : 'Abriendo YouTube Music'}</div>`;
+      @keyframes lm-eq { from { transform: scaleY(.3); } to { transform: scaleY(1); } }`));
+    const pill = el('div', 'pill'), eq = el('div', 'eq');
+    [40, 80, 55, 95, 60, 35].forEach((h, i) => { const b = el('i'); b.style.height = h + '%'; b.style.animationDelay = `-${(i * 3 % 6) / 10 + .1}s`; eq.append(b); });
+    pill.append(eq, 'Lite Music');
+    ov.append(pill, el('div', '', SP ? 'Conectando con Spotify' : 'Abriendo YouTube Music'));
     document.documentElement.appendChild(ov);
-    // lista: la barra de navegación del servicio ya está en la página. A los 20 s se va igual (sin conexión, página de error)
-    const t0 = Date.now(), ready = () => document.querySelector(SP ? '#main-view, [data-testid="root"] nav' : 'ytmusic-nav-bar');
+    // lista: el servicio ya dibujó su interfaz (YouTube Music trae sus etiquetas en el HTML desde el principio, sin tamaño:
+    // se espera a que la barra se vea y haya contenido). A los 20 s se va igual (sin conexión, página de error)
+    const t0 = Date.now(), ready = () => SP ? document.querySelector('#main-view')
+      : document.querySelector('ytmusic-nav-bar')?.offsetHeight && document.querySelector('ytmusic-section-list-renderer #contents > *, ytmusic-player-page');
     const tick = setInterval(() => {
       if (!ready() && Date.now() - t0 < 20000) return;
       clearInterval(tick); ov.classList.add('out'); setTimeout(() => ov.remove(), 400);
